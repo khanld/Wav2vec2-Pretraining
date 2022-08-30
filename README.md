@@ -71,3 +71,4 @@ tensorboard --logdir ~/<output_dir>/logs
 # specify a port 8080
 tensorboard --logdir ~/<output_dir>/logs --port 8080
 ```
+![tensorboard](examples/TensorBoard.png)

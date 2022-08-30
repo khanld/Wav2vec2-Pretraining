@@ -67,6 +67,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--seperator",
+        type=str,
+        default="\t",
+        help="The name of the dataset to use (via the datasets library).",
+    )
+
+    parser.add_argument(
         "--preprocessing_num_workers",
         type=int,
         default=None,

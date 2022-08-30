@@ -37,6 +37,7 @@ pip install -r requirements.txt
             --train_cache_file_name="cache/train_960h.arrow" \
             --validation_cache_file_name="cache/validation.arrow" \
             --audio_column_name="PATH" \
+            --separator="\t" \
             --model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
             --output_dir="/wav2vec2-pretrained-960h" \
             --max_train_steps="200000" \

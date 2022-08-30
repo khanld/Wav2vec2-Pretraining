@@ -67,6 +67,13 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--keep_in_memory ",
+        action="store_true",
+        help="Keep the dataset in memory instead of writing it to a cache file. Caching would need huge memory but less computational because of no recomputation when using .map()",
+    )
+
+
+    parser.add_argument(
         "--seperator",
         type=str,
         default="\t",
@@ -472,6 +479,7 @@ def main():
             num_proc=args.preprocessing_num_workers,
             remove_columns=raw_datasets["train"].column_names,
             cache_file_names=cache_file_names,
+            keep_in_memory=args.keep_in_memory
         )
 
         if min_length > 0.0:
@@ -479,6 +487,7 @@ def main():
                 lambda x: x > min_length,
                 num_proc=args.preprocessing_num_workers,
                 input_columns=["input_length"],
+                keep_in_memory=args.keep_in_memory
             )
 
         vectorized_datasets = vectorized_datasets.remove_columns("input_length")
@@ -658,7 +667,7 @@ def main():
                     percent_masked = accelerator.gather(percent_masked).sum()
 
                 train_logs = {
-                  from_pret  "loss": (loss * args.gradient_accumulation_steps) / num_losses,
+                    "loss": (loss * args.gradient_accumulation_steps) / num_losses,
                     "constrast_loss": outputs.contrastive_loss / num_losses,
                     "div_loss": outputs.diversity_loss / num_losses,
                     "%_mask_idx": percent_masked / accelerator.num_processes,
@@ -688,10 +697,10 @@ def main():
                     state_dict = {
                         "optimizer": optimizer.state_dict(),
                         "scheduler": lr_scheduler.state_dict(),
-                        "completed_steps": completed_steps
+                        "completed_steps": completed_steps,
                         "scaler": accelerator.scaler.state_dict() if hasattr(accelerator, "scaler") and accelerator.scaler is not None else None
                     }
-                    torch.save(state_dict, args.output_dir, "latest_checkpoint.pt"))
+                    torch.save(state_dict, os.path.join(args.output_dir, "latest_checkpoint.pt"))
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
                     repo.push_to_hub(

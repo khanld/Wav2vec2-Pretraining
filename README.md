@@ -23,6 +23,7 @@ pip install -r requirements.txt
     - Check out our [data_example.csv](examples/data_example.csv) file for more information.
 
 3. Run
+I strongly recommend running ```python run.py --help``` to understand the arguments before training.
     - Train:
         ```
         CUDA_VISIBLE_DEVICES="0,1" accelerate launch \

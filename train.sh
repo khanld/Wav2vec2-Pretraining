@@ -1,0 +1,28 @@
+CUDA_VISIBLE_DEVICES="0,1,5,7" accelerate launch \
+    --multi_gpu \
+	--num_machines=1 \
+    --num_processes=4 \
+	--mixed_precision="fp16" \
+	--num_cpu_threads_per_process="16" \
+	run_wav2vec2_pretraining_no_trainer.py \
+		--train_datasets data/train_clean_100.tsv data/train_clean_360.tsv data/train_other_500.tsv \
+		--val_datasets data/dev_clean.tsv data/dev_other.tsv \
+		--train_cache_file_name="cache/train_960h.arrow" \
+        --validation_cache_file_name="cache/validation.arrow" \
+		--model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
+		--output_dir="/data1/speech/khanhld/wav2vec-pretraining-hpc2/wav2vec2-pretrained-960h" \
+		--max_train_steps="200000" \
+		--num_warmup_steps="32000" \
+		--gradient_accumulation_steps="8" \
+		--learning_rate="0.005" \
+		--weight_decay="0.01" \
+		--max_duration_in_seconds="20.0" \
+		--min_duration_in_seconds="2.0" \
+		--logging_steps="1" \
+		--saving_steps="50" \
+		--per_device_train_batch_size="8" \
+		--per_device_eval_batch_size="8" \
+		--adam_beta1="0.9" \
+		--adam_beta2="0.98" \
+		--adam_epsilon="1e-06" \
+		--gradient_checkpointing \

@@ -10,7 +10,7 @@ Most of the codes originated from [run_wav2vec2_pretraining_no_trainer.py](https
 
 
 <a name = "installation" ></a>
-## Installation
+### Installation
 ```
 pip install -r requirements.txt
 ```
@@ -36,6 +36,7 @@ pip install -r requirements.txt
             --val_datasets data/dev_clean.tsv data/dev_other.tsv \
             --train_cache_file_name="cache/train_960h.arrow" \
             --validation_cache_file_name="cache/validation.arrow" \
+            --audio_column_name="PATH" \
             --model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
             --output_dir="/wav2vec2-pretrained-960h" \
             --max_train_steps="200000" \

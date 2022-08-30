@@ -412,6 +412,10 @@ def main():
             repo = Repository(args.output_dir, clone_from=repo_name)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
+
+        if args.keep_in_memory:
+            os.makedirs('/cache', exist_ok=True)
+                
     accelerator.wait_for_everyone()
 
     # 2. Now we preprocess the datasets including loading the audio, resampling and normalization

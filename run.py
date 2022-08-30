@@ -74,7 +74,7 @@ def parse_args():
 
 
     parser.add_argument(
-        "--seperator",
+        "--separator",
         type=str,
         default="\t",
         help="The name of the dataset to use (via the datasets library).",
@@ -431,7 +431,7 @@ def main():
     raw_datasets["train"] = load_dataset(
         "csv",
         data_files = args.train_datasets,
-        sep = '\t', 
+        sep = args.separator, 
         header = 0,
         split = "train"
     )
@@ -439,7 +439,7 @@ def main():
     raw_datasets["validation"] = load_dataset(
         "csv",
         data_files = args.val_datasets,
-        sep = '\t', 
+        sep = args.separator,
         header = 0,
         split = "train"
     )

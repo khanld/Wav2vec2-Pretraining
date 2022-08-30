@@ -31,7 +31,7 @@ pip install -r requirements.txt
         --num_processes="2" \
         --mixed_precision="fp16" \
         --num_cpu_threads_per_process="16" \
-        run_wav2vec2_pretraining_no_trainer.py \
+        run.py \
             --train_datasets data/train_clean_100.tsv data/train_clean_360.tsv data/train_other_500.tsv \
             --val_datasets data/dev_clean.tsv data/dev_other.tsv \
             --train_cache_file_name="cache/train_960h.arrow" \

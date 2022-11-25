@@ -17,7 +17,7 @@ CUDA_VISIBLE_DEVICES="0" accelerate launch \
 		--separator="\t" \
 		--model_name_or_path="facebook/wav2vec2-base" \
 		--load_from_pretrained \
-		--output_dir="/data1/speech/khanhld/wav2vec-pretraining-hpc3/wav2vec2_pretraining-production" \
+		--output_dir="wav2vec2_pretraining" \
 		--max_train_steps="300000" \
 		--num_warmup_steps="90000" \
 		--gradient_accumulation_steps="8" \

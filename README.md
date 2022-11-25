@@ -7,7 +7,8 @@ Most of the codes originated from [run_wav2vec2_pretraining_no_trainer.py](https
 - [x] Train on your own local datasets
 - [x] Visualization with Tensorboard 
 - [x] Resume training (optimizer, a learning rate scheduler, gradient scaler,...) from the latest checkpoint.
-
+- [x] No data caching. Data is loaded on the fly (no disk memory consuming)
+- [x] Checkpoint is saved separately at each epoch
 
 <a name = "installation" ></a>
 ### Installation
@@ -23,7 +24,7 @@ pip install -r requirements.txt
     - If <b>DURATION</b> column is not provided, all audio will be used. Audio length should be at least <b>0.5s</b>.
     - Check out our [data_example.csv](examples/data_example.csv) file for more information.
 
-3. Run
+2. Run
 I strongly recommend running ```python run.py --help``` to understand the arguments before training.
     - Train:
         ```
@@ -64,6 +65,8 @@ I strongly recommend running ```python run.py --help``` to understand the argume
         ```
         --resume
         ```
+3. Tips for training: Some good metrics to guarantee your pretraining process is running right: contras_loss and cosine_sim. Usually, the contrastive loss should be below 2.0, and cosine_sim should be higher than 50%. 
+
 
 <a name = "logs" ></a>
 ### Logs and Visualization

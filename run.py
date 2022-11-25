@@ -369,10 +369,6 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     args = parse_args()
 
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    # send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
-
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator(dispatch_batches=False)
     logger.info(accelerator.state, main_process_only=False)
@@ -502,7 +498,7 @@ def main():
                                 map_location="cpu")
 
 
-    # 5. Train
+    # Train
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     # Scheduler and math around the number of training steps.
@@ -607,7 +603,7 @@ def main():
                 progress_bar.update(1)
                 completed_steps += 1
 
-            # 6. Log all results
+            # Log all results
             if (step + 1) % (args.gradient_accumulation_steps * args.logging_steps) == 0:
                 loss.detach()
                 outputs.contrastive_loss.detach()
@@ -674,7 +670,7 @@ def main():
                 break
 
         print("******END OF EPOCH******")
-        # 7. Validate!
+        # Validate!
         model.eval()
 
         # init logs

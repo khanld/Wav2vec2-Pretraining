@@ -19,13 +19,21 @@ import argparse
 import math
 import os
 import librosa
+import pandas as pd
+import numpy as np
+import soundfile as sf
+from scipy.io import wavfile
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
+from tqdm import tqdm
 
 import datasets
 import torch
-from datasets import DatasetDict, concatenate_datasets, load_dataset
+# import torchaudio
+from torch.utils.data import Dataset
+from datasets import DatasetDict, concatenate_datasets, load_dataset, IterableDatasetDict
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
@@ -44,6 +52,8 @@ from transformers import (
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
 from transformers.utils import get_full_repo_name
+import time
+
 
 
 logger = get_logger(__name__)
@@ -67,32 +77,10 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--keep_in_memory ",
-        action="store_true",
-        help="Keep the dataset in memory instead of writing it to a cache file. Caching would need huge memory but less computational because of no recomputation when using .map()",
-    )
-
-
-    parser.add_argument(
         "--separator",
         type=str,
-        default="\t",
-        help="The name of the dataset to use (via the datasets library).",
-    )
-
-    parser.add_argument(
-        "--preprocessing_num_workers",
-        type=int,
         default=None,
-        help="The number of processes to use for the preprocessing.",
-    )
-    parser.add_argument(
-        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
-    )
-    parser.add_argument(
-        "--preprocessing_only",
-        action="store_true",
-        help="Only run the preprocessing script to be cached for future use",
+        help="The name of the dataset to use (via the datasets library).",
     )
 
     parser.add_argument(
@@ -101,18 +89,6 @@ def parse_args():
         help="Resume training.",
     )
 
-    parser.add_argument(
-        "--cache_dir",
-        type=str,
-        default=None,
-        help="Where do you want to store the pretrained models downloaded from huggingface.co",
-    )
-    parser.add_argument(
-        "--validation_split_percentage",
-        type=int,
-        default=1,
-        help="Percentage of training data that should be used for validation if no validation is present in dataset.",
-    )
     parser.add_argument(
         "--logging_steps",
         type=int,
@@ -128,40 +104,38 @@ def parse_args():
     parser.add_argument(
         "--audio_column_name",
         type=str,
-        default="audio",
+        default="path",
         help="Column in the dataset that contains speech file path. Defaults to 'audio'",
     )
+    parser.add_argument(
+        "--duration_column_name",
+        type=str,
+        default="duration",
+        help="Column in the dataset that contains speech file path. Defaults to 'audio'",
+    )
+
     parser.add_argument(
         "--model_name_or_path",
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
         required=True,
     )
-    
+
     parser.add_argument(
-        "--config_name",
+        "--pretrained_path",
         type=str,
         default=None,
-        help="Pretrained config name or path if not the same as model_name",
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=True,
     )
-    parser.add_argument(
-        "--train_cache_file_name",
-        type=str,
-        default=None,
-        help="Path to the train cached file name",
-    )
-    parser.add_argument(
-        "--validation_cache_file_name",
-        type=str,
-        default=None,
-        help="Path to the validation cached file name",
-    )
+
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
         default=8,
         help="Batch size (per device) for the training dataloader.",
     )
+
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
@@ -275,6 +249,44 @@ def parse_args():
 
     return args
 
+
+class CustomDataset(Dataset):
+    def __init__(self, files, sep, sr, audio_column_name, duration_column_name, min_duration, max_duration):
+        self.sep = sep
+        self.sr = sr
+        self.min_duration = min_duration
+        self.max_duration = max_duration
+        self.audio_column_name = audio_column_name
+        self.duration_column_name = duration_column_name
+        self.data = self.load_ds(files)
+    
+    def load_ds(self, all_files):
+        li = []
+        for filename in all_files:
+            df = pd.read_csv(filename, sep=self.sep, engine="python")
+            li.append(df)
+        data = pd.concat(li, axis=0, ignore_index=True)
+
+        if self.duration_column_name in data.columns:
+            data = data[data[self.duration_column_name] >= self.min_duration]
+            print("Mean duration: ", data[self.duration_column_name].mean())
+        return data
+
+    def __len__(self) -> int:
+        return len(self.data)
+        
+    def __getitem__(self, idx):
+        item = self.data.iloc[idx]
+        batch = {}
+        batch["input_values"] = sf.read(item[self.audio_column_name])[0]
+
+        if len(batch["input_values"])//self.sr > self.max_duration:
+            start = np.random.randint(0, len(batch["input_values"]) - self.max_duration * self.sr)
+            batch["input_values"] = batch["input_values"][start : start + int(self.max_duration * self.sr)]
+
+        return batch
+
+
 @dataclass
 class DataCollatorForWav2Vec2Pretraining:
     """
@@ -339,9 +351,8 @@ class DataCollatorForWav2Vec2Pretraining:
             features_shape,
             self.model.config.mask_time_prob,
             self.model.config.mask_time_length,
-            attention_mask=batch.get("sub_attention_mask"),
+            attention_mask=batch.get("sub_attention_mask")
         )
-
         # sample negative indices
         sampled_negative_indices = _sample_negative_indices(
             features_shape,
@@ -385,7 +396,7 @@ def main():
     # send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator()
+    accelerator = Accelerator(dispatch_batches=False)
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
@@ -404,7 +415,7 @@ def main():
 
     # Handle the repository creation
     if accelerator.is_main_process:
-        if args.push_to_hub and not args.preprocessing_only:
+        if args.push_to_hub:
             if args.hub_model_id is None:
                 repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
             else:
@@ -413,110 +424,51 @@ def main():
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
 
-        if args.keep_in_memory:
-            os.makedirs('/cache', exist_ok=True)
                 
     accelerator.wait_for_everyone()
 
-    # 2. Now we preprocess the datasets including loading the audio, resampling and normalization
-    # Thankfully, `datasets` takes care of automatically loading and resampling the audio,
-    # so that we just need to set the correct target sampling rate and normalize the input
-    # via the `feature_extractor`
+    # Download data
+    train_dataset = CustomDataset(
+        args.train_datasets, 
+        sep=args.separator, 
+        audio_column_name=args.audio_column_name, 
+        duration_column_name=args.duration_column_name,
+        sr=16000, 
+        min_duration=args.min_duration_in_seconds, 
+        max_duration=args.max_duration_in_seconds)
+
+    val_dataset = CustomDataset(
+        args.val_datasets, 
+        sep=args.separator, 
+        audio_column_name=args.audio_column_name, 
+        duration_column_name=args.duration_column_name,
+        sr=16000, 
+        min_duration=args.min_duration_in_seconds, 
+        max_duration=args.max_duration_in_seconds)
+
+
+    # Load feature_extractor
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(args.model_name_or_path)
-
-    # 1. Download and create train, validation dataset
-    # We load all dataset configuration and datset split pairs passed in
-
-    raw_datasets = DatasetDict()
-    raw_datasets["train"] = load_dataset(
-        "csv",
-        data_files = args.train_datasets,
-        sep = args.separator, 
-        header = 0,
-        split = "train"
-    )
-
-    raw_datasets["validation"] = load_dataset(
-        "csv",
-        data_files = args.val_datasets,
-        sep = args.separator,
-        header = 0,
-        split = "train"
-    )
-
-
-    # make sure that dataset decodes audio with correct sampling rate
-    raw_datasets = raw_datasets.cast_column(
-        args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
-    )
-
-
     # only normalized-inputs-training is supported
     if not feature_extractor.do_normalize:
         raise ValueError(
             "Training is only supported for normalized inputs. Make sure ``feature_extractor.do_normalize == True``"
         )
 
-    # set max & min audio length in number of samples
-    max_length = int(args.max_duration_in_seconds * feature_extractor.sampling_rate)
-    min_length = int(args.min_duration_in_seconds * feature_extractor.sampling_rate)
-
-    def prepare_dataset(batch):
-        sample = batch[args.audio_column_name]
-        inputs = feature_extractor(
-            sample["array"], sampling_rate=sample["sampling_rate"], max_length=max_length, truncation=True
-        )
-        batch["input_values"] = inputs.input_values[0]
-        batch["input_length"] = len(inputs.input_values[0])
-
-        return batch
-
-    # load via mapped files via path
-    cache_file_names = None
-    if args.train_cache_file_name is not None:
-        cache_file_names = {"train": args.train_cache_file_name, "validation": args.validation_cache_file_name}
-
-    # load audio files into numpy arrays
-    with accelerator.main_process_first():
-        vectorized_datasets = raw_datasets.map(
-            prepare_dataset,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=raw_datasets["train"].column_names,
-            cache_file_names=cache_file_names,
-            keep_in_memory=args.keep_in_memory
-        )
-
-        if min_length > 0.0:
-            vectorized_datasets = vectorized_datasets.filter(
-                lambda x: x > min_length,
-                num_proc=args.preprocessing_num_workers,
-                input_columns=["input_length"],
-                keep_in_memory=args.keep_in_memory
-            )
-
-        vectorized_datasets = vectorized_datasets.remove_columns("input_length")
-
-    # for large datasets it is advised to run the preprocessing on a
-    # single machine first with ``args.preprocessing_only`` since there will mostly likely
-    # be a timeout when running the script in distributed mode.
-    # In a second step ``args.preprocessing_only`` can then be set to `False` to load the
-    # cached dataset
-    if args.preprocessing_only:
-        return
-
-    # 3. Load model
+    # Load model config
     config = Wav2Vec2Config.from_pretrained(args.model_name_or_path)
-
-    # pretraining is only supported for "newer" stable layer norm architecture
-    # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
             "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
             " ``config.feat_extract_norm='layer'"
         )
 
+
     # initialize random model
     model = Wav2Vec2ForPreTraining(config)
+    if args.pretrained_path is not None:
+        model = model.from_pretrained(args.pretrained_path)
+
     # Activate gradient checkpointing if needed
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
@@ -525,16 +477,22 @@ def main():
     data_collator = DataCollatorForWav2Vec2Pretraining(
         model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
     )
+
     train_dataloader = DataLoader(
-        vectorized_datasets["train"],
-        shuffle=True,
+        train_dataset,
         collate_fn=data_collator,
-        batch_size=args.per_device_train_batch_size
+        batch_size=args.per_device_train_batch_size,
+        shuffle=True,
+        num_workers=16,
+        pin_memory=True,
+        prefetch_factor=16
     )
+
     eval_dataloader = DataLoader(
-        vectorized_datasets["validation"], 
+        val_dataset,
         collate_fn=data_collator, 
-        batch_size=args.per_device_eval_batch_size
+        batch_size=args.per_device_eval_batch_size,
+        num_workers=16
     )
 
     # Optimizer
@@ -552,21 +510,23 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-    if args.resume:
-        model.from_pretrained(args.output_dir)
-        checkpoint = torch.load(os.path.join(args.output_dir, 'latest_checkpoint.pt'), 
-                                map_location=accelerator.process_index )
-        optimizer.load_state_dict(checkpoint["optimizer"])
-        lr_scheduler.load_state_dict(checkpoint["scheduler"])
-        accelerator.scaler.load_state_dict(checkpoint['scaler']) if hasattr(accelerator, "scaler") and accelerator.scaler is not None else None
-
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler 
     )
+    if args.resume:
+        print("******Resume checkpoint******")
+        accelerator.load_state(args.output_dir)
+        checkpoint = torch.load(os.path.join(args.output_dir, 'latest_checkpoint.pt'), 
+                                map_location="cpu")
+
+
+    # 5. Train
+    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     # Scheduler and math around the number of training steps.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+
 
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -575,24 +535,32 @@ def main():
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-    # 5. Train
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    if accelerator.is_main_process:
+        print("Number of training data: ", len(train_dataset))
+        print("total_batch_size: ", total_batch_size)
+        print("num_update_steps_per_epoch: ", num_update_steps_per_epoch)
+        print("num_train_epochs: ", args.num_train_epochs)
+
 
     logger.info("***** Running training *****")
-    logger.info(f"  Num examples = {len(vectorized_datasets['train'])}")
+    logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
     logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
-    completed_steps = 0
-    starting_epoch = 0
 
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
-    completed_steps = checkpoint['completed_steps'] if args.resume else 0
-    starting_epoch = 0
+    completed_steps = checkpoint['completed_steps'] + 1 if args.resume else 0
+    starting_epoch = checkpoint['epoch'] if args.resume else 0
+    progress_bar = tqdm(initial = completed_steps, total = args.max_train_steps, disable=not accelerator.is_local_main_process)
+
+    print(f"******STARTING AT EPOCH {starting_epoch} - STEP {completed_steps}******")
+
+
     for epoch in range(starting_epoch, args.num_train_epochs):
+        if accelerator.is_main_process:
+            print(f"\nEpoch {epoch}: ")
         model.train()
         for step, batch in enumerate(train_dataloader):
             # compute num of losses
@@ -621,7 +589,7 @@ def main():
                 multiply_grads(model.parameters(), 1 / num_losses)
 
             # update step
-            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            if (step + 1) % args.gradient_accumulation_steps == 0:
 
                 # compute grad norm for monitoring
                 scale = (
@@ -663,22 +631,27 @@ def main():
                 loss.detach()
                 outputs.contrastive_loss.detach()
                 outputs.diversity_loss.detach()
+                cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+                cosine_sim = cosine_sim[batch["mask_time_indices"].to(torch.bool)].mean()
 
                 if accelerator.state.num_processes > 1:
                     loss = accelerator.gather(loss).sum()
                     outputs.contrastive_loss = accelerator.gather(outputs.contrastive_loss).sum()
                     outputs.diversity_loss = accelerator.gather(outputs.diversity_loss).sum()
                     percent_masked = accelerator.gather(percent_masked).sum()
+                    cosine_sim = accelerator.gather(cosine_sim).mean()
 
                 train_logs = {
+                    "step": torch.tensor((step + 1) // args.gradient_accumulation_steps, dtype=torch.int32),
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
                     "constrast_loss": outputs.contrastive_loss / num_losses,
                     "div_loss": outputs.diversity_loss / num_losses,
                     "%_mask_idx": percent_masked / accelerator.num_processes,
                     "ppl": outputs.codevector_perplexity,
-                    "lr": torch.tensor(optimizer.param_groups[0]["lr"]),
+                    "lr": torch.tensor(lr_scheduler.get_lr()),
                     "temp": torch.tensor(gumbel_temperature),
                     "grad_norm": torch.tensor(grad_norm),
+                    "cosine_sim": cosine_sim * 100
                 }
                 log_str = ""
                 for k, v in train_logs.items():
@@ -696,15 +669,16 @@ def main():
                     accelerator.wait_for_everyone()
                     unwrapped_model = accelerator.unwrap_model(model)
                     unwrapped_model.save_pretrained(
-                        args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-                    )
-                    state_dict = {
-                        "optimizer": optimizer.state_dict(),
-                        "scheduler": lr_scheduler.state_dict(),
-                        "completed_steps": completed_steps,
-                        "scaler": accelerator.scaler.state_dict() if hasattr(accelerator, "scaler") and accelerator.scaler is not None else None
-                    }
-                    torch.save(state_dict, os.path.join(args.output_dir, "latest_checkpoint.pt"))
+                            args.output_dir + f'/saved_model/epoch_{epoch}', is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                        )
+                    if accelerator.is_main_process:
+                        print("****Saving checkpoint*****")
+                        state_dict = {
+                            "completed_steps": completed_steps,
+                            "epoch": epoch
+                        }
+                        torch.save(state_dict, os.path.join(args.output_dir, "latest_checkpoint.pt"))
+                    accelerator.save_state(args.output_dir)
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
                     repo.push_to_hub(
@@ -717,6 +691,7 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
+        print("******END OF EPOCH******")
         # 7. Validate!
         model.eval()
 
@@ -752,14 +727,22 @@ def main():
             for k, v in val_logs.items():
                 writer.add_scalar('VALIDATION' + '/' + k, v, epoch)
 
-            
 
         if args.output_dir is not None:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
             unwrapped_model.save_pretrained(
-                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-            )
+                    args.output_dir + f'/saved_model/epoch_{epoch}', is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                )
+            if accelerator.is_main_process:
+                print("****Saving checkpoint*****")
+                state_dict = {
+                    "completed_steps": completed_steps,
+                    "epoch": epoch
+                }
+                torch.save(state_dict, os.path.join(args.output_dir, "latest_checkpoint.pt"))
+
+            accelerator.save_state(args.output_dir)
             if accelerator.is_main_process:
                 if args.push_to_hub:
                     repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)

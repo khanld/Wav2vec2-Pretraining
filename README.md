@@ -19,43 +19,46 @@ pip install -r requirements.txt
 ### Usage
 1. Prepare your dataset
     - Your dataset can be in <b>.txt</b> or <b>.csv</b> format.
-    - Only <b>PATH</b> column is compulsory, the others (eg: DURATION, TRANSCRIPT, ...) are not nescessary. <b>PATH</b> contains the paths to your stored audio files. Depending on your dataset location, it can be either absolute paths or relative paths.
+    - Only <b>PATH</b> column is compulsory, the others (eg: DURATION, TRANSCRIPT, ...) are not necessary. <b>PATH</b> contains the paths to your stored audio files. Depending on your dataset location, it can be either absolute paths or relative paths. 
+    - If <b>DURATION</b> column is not provided, all audio will be used. Audio length should be at least <b>0.5s</b>.
     - Check out our [data_example.csv](examples/data_example.csv) file for more information.
 
 3. Run
 I strongly recommend running ```python run.py --help``` to understand the arguments before training.
     - Train:
         ```
-        CUDA_VISIBLE_DEVICES="0,1" accelerate launch \
-        --multi_gpu \
-        --num_machines="1" \
-        --num_processes="2" \
-        --mixed_precision="fp16" \
-        --num_cpu_threads_per_process="16" \
-        run.py \
-            --train_datasets data/train_clean_100.tsv data/train_clean_360.tsv data/train_other_500.tsv \
-            --val_datasets data/dev_clean.tsv data/dev_other.tsv \
-            --train_cache_file_name="cache/train_960h.arrow" \
-            --validation_cache_file_name="cache/validation.arrow" \
-            --audio_column_name="PATH" \
-            --separator="\t" \
-            --model_name_or_path="patrickvonplaten/wav2vec2-base-v2" \
-            --output_dir="/wav2vec2-pretrained-960h" \
-            --max_train_steps="200000" \
-            --num_warmup_steps="32000" \
-            --gradient_accumulation_steps="8" \
-            --learning_rate="0.005" \
-            --weight_decay="0.01" \
-            --max_duration_in_seconds="20.0" \
-            --min_duration_in_seconds="2.0" \
-            --logging_steps="1" \
-            --saving_steps="50" \
-            --per_device_train_batch_size="8" \
-            --per_device_eval_batch_size="8" \
-            --adam_beta1="0.9" \
-            --adam_beta2="0.98" \
-            --adam_epsilon="1e-06" \
-            --gradient_checkpointing \
+        CUDA_VISIBLE_DEVICES="0" accelerate launch \
+            --multi_gpu \
+            --num_machines="1" \
+            --num_processes="1" \
+            --mixed_precision="fp16" \
+            --num_cpu_threads_per_process="12" \
+            run_wav2vec2_pretraining_no_trainer.py \
+                --train_datasets \ 
+                    data/train_clean_100.tsv \
+                    data/train_clean_360.tsv \
+                    data/train_other_500.tsv \
+                --val_datasets \
+                    data/dev_clean.tsv \
+                    data/dev_other.tsv \
+                --audio_column_name="path" \
+                --duration_column_name="duration" \
+                --separator="\t" \
+                --model_name_or_path="facebook/wav2vec2-base" \
+                --load_from_pretrained \
+                --output_dir="wav2vec2_pretraining" \
+                --max_train_steps="200000" \
+                --num_warmup_steps="32000" \
+                --gradient_accumulation_steps="8" \
+                --learning_rate="0.005" \
+                --weight_decay="0.01" \
+                --max_duration_in_seconds="15.6" \
+                --min_duration_in_seconds="0.5" \
+                --logging_steps="1" \
+                --saving_steps="100" \
+                --per_device_train_batch_size="16" \
+                --per_device_eval_batch_size="8" \
+                --gradient_checkpointing
         ```
     - Resume: Same as Train, but with an additional argument
         ```

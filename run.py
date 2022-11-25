@@ -673,6 +673,7 @@ def main():
                             args.output_dir + f'/saved_model/epoch_{epoch}', is_main_process=accelerator.is_main_process, save_function=accelerator.save
                         )
                     if accelerator.is_main_process:
+                        feature_extractor.save_pretrained(args.output_dir + f'/saved_model/epoch_{epoch}')
                         print("****Saving checkpoint*****")
                         state_dict = {
                             "completed_steps": completed_steps,
@@ -737,6 +738,7 @@ def main():
                     args.output_dir + f'/saved_model/epoch_{epoch}', is_main_process=accelerator.is_main_process, save_function=accelerator.save
                 )
             if accelerator.is_main_process:
+                feature_extractor.save_pretrained(args.output_dir + f'/saved_model/epoch_{epoch}')
                 print("****Saving checkpoint*****")
                 state_dict = {
                     "completed_steps": completed_steps,

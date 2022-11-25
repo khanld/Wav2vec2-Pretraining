@@ -122,11 +122,9 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--pretrained_path",
-        type=str,
-        default=None,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-        required=True,
+        "--load_from_pretrained",
+        action="store_true",
+        help="Whether to load pretrained model from model_name_or_path."
     )
 
     parser.add_argument(
@@ -466,8 +464,11 @@ def main():
 
     # initialize random model
     model = Wav2Vec2ForPreTraining(config)
-    if args.pretrained_path is not None:
-        model = model.from_pretrained(args.pretrained_path)
+    if args.load_from_pretrained is not None:
+        try:
+            model = model.from_pretrained(args.model_name_or_path)
+        except:
+            print("!!!!! Warning: Pretrained model may not exist. Start training from Scratch")
 
     # Activate gradient checkpointing if needed
     if args.gradient_checkpointing:
@@ -727,6 +728,7 @@ def main():
             for k, v in val_logs.items():
                 writer.add_scalar('VALIDATION' + '/' + k, v, epoch)
 
+            
 
         if args.output_dir is not None:
             accelerator.wait_for_everyone()

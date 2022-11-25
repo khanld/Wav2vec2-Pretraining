@@ -81,7 +81,7 @@ pip install -r requirements.txt
         model = Wav2Vec2Model.from_pretrained("<output_dir>/saved_model/epoch_10")
 
         # run forward pass
-        inputs = feature_extractor(wav, sampling_rate=r, return_tensors="pt")
+        inputs = feature_extractor(wav, sampling_rate=sr, return_tensors="pt")
         with torch.no_grad():
             outputs = model(**inputs)
 

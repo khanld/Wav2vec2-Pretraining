@@ -1,9 +1,9 @@
 # PRETRAINING WAV2VEC 2.0 ON YOUR OWN DATASETS
-Now you can pre-train Wav2vec 2.0 model on your dataset, push it into the Huggingface hub, and finetune it on downstream tasks with just a few lines of code. Follow the below instruction on how to use it.
 <a name = "documentation" ></a>
 ### Documentation
-Most of the codes originated from [run_wav2vec2_pretraining_no_trainer.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-pretraining/run_wav2vec2_pretraining_no_trainer.py) from Huggingface but are more friendly and easier to use, visualize and control the training process. </br>
-### New supporting features include:
+Now you can pre-train Wav2vec 2.0 model on your dataset, push it into the Huggingface hub, and finetune it on downstream tasks with just a few lines of code. Follow the below instruction on how to use it.
+
+### Supporting features include:
 - [x] Train on your own local datasets.
 - [x] Visualization with Tensorboard.
 - [x] Resume training (optimizer, a learning rate scheduler, gradient scaler,...) from the latest checkpoint.

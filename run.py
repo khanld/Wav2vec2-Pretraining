@@ -645,7 +645,7 @@ def main():
                 train_logs = {
                     "step": torch.tensor((step + 1) // args.gradient_accumulation_steps, dtype=torch.int32),
                     "loss": (loss * args.gradient_accumulation_steps) / num_losses,
-                    "constrast_loss": outputs.contrastive_loss / num_losses,
+                    "contrast_loss": outputs.contrastive_loss / num_losses,
                     "div_loss": outputs.diversity_loss / num_losses,
                     "%_mask_idx": percent_masked / accelerator.num_processes,
                     "ppl": outputs.codevector_perplexity,

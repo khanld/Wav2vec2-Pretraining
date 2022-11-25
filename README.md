@@ -67,7 +67,7 @@ pip install -r requirements.txt
 3. Tips for training: Some good metrics to guarantee your pretraining process is running right: <b>contrast_loss</b> and <b>cosine_sim</b>. Usually, the <b>contrastive loss should be below 2.0</b>, and <b>cosine_sim should be higher than 50%</b>. 
 
 4. How to use your pre-trained model: 
-    - I load my pre-trained model checkpoint from epoch 10 and get the last hidden state embedding.
+    - I load my pre-trained model checkpoint from epoch 10 and get the last hidden state embedding:
         ```
         from transformers import Wav2Vec2Processor, Wav2Vec2Model
         import torch
@@ -88,7 +88,7 @@ pip install -r requirements.txt
         last_hidden_state = outputs.last_hidden_state
         print(last_hidden_state.shape)
         ```
-    - Finetune for ASR task: Check out this [REPO](https://github.com/khanld/ASR-Wav2vec-Finetune) for finetuning Wav2vec 2.0 for Automatic Speech Recognition using Connectionist Temporal Classification
+    - Finetune for ASR task: Check out this [REPO](https://github.com/khanld/ASR-Wav2vec-Finetune) for finetuning Wav2vec 2.0 for Automatic Speech Recognition using Connectionist Temporal Classification.
 
 <a name = "logs" ></a>
 ### Logs and Visualization

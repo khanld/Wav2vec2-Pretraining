@@ -18,14 +18,13 @@ pip install -r requirements.txt
 
 <a name = "usage" ></a>
 ### Usage
-1. Prepare your dataset
+1. Prepare your dataset:
     - Your dataset can be in <b>.txt</b> or <b>.csv</b> format.
     - Only <b>PATH</b> column is compulsory, the others (eg: DURATION, TRANSCRIPT, ...) are not necessary. <b>PATH</b> contains the paths to your stored audio files. Depending on your dataset location, it can be either absolute paths or relative paths. 
     - If <b>DURATION</b> column is not provided, all audio will be used. Audio length should be at least <b>0.5s</b>.
     - Check out our [data_example.csv](examples/data_example.csv) file for more information.
 
-2. Run
-I strongly recommend running ```python run.py --help``` to understand the arguments before training.
+2. Run: I strongly recommend running ```python run.py --help``` to understand the arguments before training.
     - Train:
         ```
         CUDA_VISIBLE_DEVICES="0" accelerate launch \

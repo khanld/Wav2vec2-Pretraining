@@ -64,7 +64,7 @@ pip install -r requirements.txt
         ```
         --resume
         ```
-3. Tips for training: Some good metrics to guarantee your pretraining process is running right: contras_loss and cosine_sim. Usually, the contrastive loss should be below 2.0, and cosine_sim should be higher than 50%. 
+3. Tips for training: Some good metrics to guarantee your pretraining process is running right: <b>contras_loss</b> and <b>cosine_sim</b>. Usually, the <b>contrastive loss should be below 2.0</b>, and <b>cosine_sim should be higher than 50%</b>. 
 
 
 <a name = "logs" ></a>

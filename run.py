@@ -373,15 +373,8 @@ def main():
     accelerator = Accelerator(dispatch_batches=False)
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
-        datasets.utils.logging.set_verbosity_warning()
-        transformers.utils.logging.set_verbosity_info()
-
         # set up tensorboard if available
         writer = SummaryWriter(args.output_dir + '/logs', max_queue=5, flush_secs=30)
-
-    else:
-        datasets.utils.logging.set_verbosity_error()
-        transformers.utils.logging.set_verbosity_error()
 
     # If passed along, set the training seed now.
     if args.seed is not None:
@@ -450,7 +443,7 @@ def main():
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
 
-    # 4. Define data collator, optimizer and scheduler
+    # Define data collator, optimizer and scheduler
     data_collator = DataCollatorForWav2Vec2Pretraining(
         model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
     )
@@ -517,15 +510,6 @@ def main():
         print("total_batch_size: ", total_batch_size)
         print("num_update_steps_per_epoch: ", num_update_steps_per_epoch)
         print("num_train_epochs: ", args.num_train_epochs)
-
-
-    logger.info("***** Running training *****")
-    logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
-    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {args.max_train_steps}")
 
     # Only show the progress bar once on each machine.
     completed_steps = checkpoint['completed_steps'] + 1 if args.resume else 0

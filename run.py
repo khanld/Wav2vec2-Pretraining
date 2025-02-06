@@ -17,6 +17,7 @@ from datasets import DatasetDict, concatenate_datasets, load_dataset, IterableDa
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm.auto import tqdm
+from scheduler import WarmupLR
 
 import transformers
 from accelerate import Accelerator
@@ -33,7 +34,7 @@ from transformers import (
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
 from transformers.utils import get_full_repo_name
 import time
-
+from accelerate import DistributedDataParallelKwargs
 
 
 logger = get_logger(__name__)
@@ -370,7 +371,8 @@ def main():
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator(dispatch_batches=False)
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
+    accelerator = Accelerator(kwargs_handlers=[ddp_kwargs], step_scheduler_with_optimizer=False)
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         # set up tensorboard if available
@@ -424,11 +426,11 @@ def main():
 
     # Load model config
     config = Wav2Vec2Config.from_pretrained(args.model_name_or_path)
-    if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
-        raise ValueError(
-            "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
-            " ``config.feat_extract_norm='layer'"
-        )
+    # if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
+    #     raise ValueError(
+    #         "PreTraining is only supported for ``config.do_stable_layer_norm=True`` and"
+    #         " ``config.feat_extract_norm='layer'"
+    #     )
 
 
     # initialize random model
@@ -472,17 +474,14 @@ def main():
         betas=[args.adam_beta1, args.adam_beta2],
         eps=args.adam_epsilon,
     )
-
-    lr_scheduler = get_scheduler(
-        name=args.lr_scheduler_type,
+    lr_scheduler = WarmupLR(
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=args.max_train_steps,
+        warmup_steps=args.num_warmup_steps,
     )
 
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader 
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
     if args.resume:
         print("******Resume checkpoint******")
